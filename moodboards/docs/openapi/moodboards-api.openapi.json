@@ -1,0 +1,983 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "RoomPlan MoodBoards API",
+    "version": "1.0.0",
+    "description": "Baseline v1 для интеграции MoodBoards с RoomPlan. Нормативные правила безопасности и семантики описаны в ROOMPLAN-INTEGRATION-CONTRACT.md."
+  },
+  "servers": [
+    { "url": "/api", "description": "Same-origin RoomPlan API" }
+  ],
+  "security": [
+    { "cookieAuth": [] }
+  ],
+  "tags": [
+    { "name": "Access" },
+    { "name": "Settings" },
+    { "name": "Moodboards" },
+    { "name": "Assets" },
+    { "name": "Preview" },
+    { "name": "Sharing" },
+    { "name": "Public" }
+  ],
+  "paths": {
+    "/user/moodboards-access": {
+      "get": {
+        "operationId": "getMoodboardsAccess",
+        "tags": ["Access"],
+        "summary": "Получить тариф и эффективные ограничения MoodBoards",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Текущая политика доступа",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AccessEnvelope" } } }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/user/moodboard-settings": {
+      "get": {
+        "operationId": "getMoodboardSettings",
+        "tags": ["Settings"],
+        "summary": "Получить нормализованные настройки редактора",
+        "responses": {
+          "200": {
+            "description": "Настройки пользователя",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MoodboardSettings" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "put": {
+        "operationId": "putMoodboardSettings",
+        "tags": ["Settings"],
+        "summary": "Заменить пользовательские настройки",
+        "parameters": [
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MoodboardSettings" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Сохранённые нормализованные настройки",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MoodboardSettings" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/moodboards": {
+      "get": {
+        "operationId": "listMoodboards",
+        "tags": ["Moodboards"],
+        "summary": "Получить список досок текущего пользователя",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["active", "archived", "all"], "default": "all" }
+          },
+          { "$ref": "#/components/parameters/Cursor" },
+          { "$ref": "#/components/parameters/Limit" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Страница досок, отсортированная по updatedAt по убыванию",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MoodboardList" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "operationId": "createMoodboard",
+        "tags": ["Moodboards"],
+        "summary": "Создать доску",
+        "parameters": [
+          { "$ref": "#/components/parameters/CsrfToken" },
+          { "$ref": "#/components/parameters/IdempotencyKey" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateMoodboardRequest" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Созданная доска с revision 0",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MoodboardRecord" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "422": { "$ref": "#/components/responses/Unprocessable" }
+        }
+      }
+    },
+    "/moodboards/{moodboardId}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/MoodboardId" }
+      ],
+      "get": {
+        "operationId": "getMoodboard",
+        "tags": ["Moodboards"],
+        "summary": "Получить активную или архивную доску",
+        "responses": {
+          "200": {
+            "description": "Доска и её документ",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+              "ETag": { "$ref": "#/components/headers/RevisionEtag" }
+            },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MoodboardRecord" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "patch": {
+        "operationId": "updateMoodboardMeta",
+        "tags": ["Moodboards"],
+        "summary": "Обновить метаданные активной доски",
+        "parameters": [
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateMoodboardRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Обновлённая доска",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MoodboardSummary" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteMoodboard",
+        "tags": ["Moodboards"],
+        "summary": "Безвозвратно удалить доску, assets и shares",
+        "parameters": [
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "responses": {
+          "204": {
+            "description": "Доска удалена",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/moodboards/{moodboardId}/archive": {
+      "put": {
+        "operationId": "setMoodboardArchived",
+        "tags": ["Moodboards"],
+        "summary": "Архивировать или восстановить доску",
+        "parameters": [
+          { "$ref": "#/components/parameters/MoodboardId" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ArchiveMoodboardRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Доска с новым archivedAt",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MoodboardSummary" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/moodboards/{moodboardId}/content": {
+      "put": {
+        "operationId": "saveMoodboardContent",
+        "tags": ["Moodboards"],
+        "summary": "Сохранить полный JSON-документ с optimistic locking",
+        "parameters": [
+          { "$ref": "#/components/parameters/MoodboardId" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SaveContentRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Документ сохранён, revision увеличена на 1",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+              "ETag": { "$ref": "#/components/headers/RevisionEtag" }
+            },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MoodboardSaveResult" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "422": { "$ref": "#/components/responses/Unprocessable" }
+        }
+      }
+    },
+    "/moodboards/{moodboardId}/duplicate": {
+      "post": {
+        "operationId": "duplicateMoodboard",
+        "tags": ["Moodboards"],
+        "summary": "Атомарно дублировать активную доску и assets",
+        "parameters": [
+          { "$ref": "#/components/parameters/MoodboardId" },
+          { "$ref": "#/components/parameters/CsrfToken" },
+          { "$ref": "#/components/parameters/IdempotencyKey" }
+        ],
+        "responses": {
+          "201": {
+            "description": "Независимая копия доски",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MoodboardRecord" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/moodboards/{moodboardId}/assets": {
+      "post": {
+        "operationId": "uploadMoodboardAsset",
+        "tags": ["Assets"],
+        "summary": "Загрузить изображение в активную доску",
+        "parameters": [
+          { "$ref": "#/components/parameters/MoodboardId" },
+          { "$ref": "#/components/parameters/CsrfToken" },
+          { "$ref": "#/components/parameters/IdempotencyKey" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": { "file": { "type": "string", "format": "binary" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Проверенный и сохранённый asset",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AssetMetadata" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" },
+          "422": { "$ref": "#/components/responses/Unprocessable" }
+        }
+      }
+    },
+    "/assets/{assetId}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AssetId" }
+      ],
+      "get": {
+        "operationId": "getMoodboardAsset",
+        "tags": ["Assets"],
+        "summary": "Получить бинарный asset своей доски",
+        "responses": {
+          "200": {
+            "description": "Изображение",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+              "X-Moodboard-Id": { "schema": { "type": "string" } },
+              "X-Image-Width": { "schema": { "type": "integer" } },
+              "X-Image-Height": { "schema": { "type": "integer" } },
+              "X-Created-At": { "schema": { "type": "string", "format": "date-time" } }
+            },
+            "content": {
+              "image/jpeg": { "schema": { "type": "string", "format": "binary" } },
+              "image/png": { "schema": { "type": "string", "format": "binary" } },
+              "image/webp": { "schema": { "type": "string", "format": "binary" } }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteMoodboardAsset",
+        "tags": ["Assets"],
+        "summary": "Удалить неиспользуемый asset",
+        "parameters": [
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "responses": {
+          "204": {
+            "description": "Asset удалён",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/moodboards/{moodboardId}/preview": {
+      "parameters": [
+        { "$ref": "#/components/parameters/MoodboardId" },
+        { "$ref": "#/components/parameters/CsrfToken" }
+      ],
+      "put": {
+        "operationId": "putMoodboardPreview",
+        "tags": ["Preview"],
+        "summary": "Сохранить PNG preview активной доски",
+        "requestBody": {
+          "required": true,
+          "content": { "image/png": { "schema": { "type": "string", "format": "binary" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Обновлённые метаданные доски",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MoodboardSummary" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteMoodboardPreview",
+        "tags": ["Preview"],
+        "summary": "Очистить preview и использовать дефолтную карточку",
+        "responses": {
+          "204": {
+            "description": "Preview очищен",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/moodboards/{moodboardId}/shares": {
+      "post": {
+        "operationId": "createMoodboardShare",
+        "tags": ["Sharing"],
+        "summary": "Создать публичный read-only snapshot",
+        "parameters": [
+          { "$ref": "#/components/parameters/MoodboardId" },
+          { "$ref": "#/components/parameters/CsrfToken" },
+          { "$ref": "#/components/parameters/IdempotencyKey" }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateShareRequest" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Новая публичная ссылка",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ShareRecord" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/moodboards/{moodboardId}/shares/{shareId}": {
+      "delete": {
+        "operationId": "revokeMoodboardShare",
+        "tags": ["Sharing"],
+        "summary": "Отозвать публичную ссылку по private share ID",
+        "parameters": [
+          { "$ref": "#/components/parameters/MoodboardId" },
+          { "$ref": "#/components/parameters/ShareId" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "responses": {
+          "204": {
+            "description": "Ссылка отозвана",
+            "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/public/moodboards/{shareToken}": {
+      "get": {
+        "operationId": "getPublicMoodboardSnapshot",
+        "tags": ["Public"],
+        "summary": "Получить публичный read-only snapshot",
+        "security": [],
+        "parameters": [
+          { "$ref": "#/components/parameters/ShareToken" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Snapshot без приватных идентификаторов владельца",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+              "Cache-Control": { "schema": { "type": "string", "const": "private, no-store" } }
+            },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicMoodboardSnapshot" } } }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "410": { "$ref": "#/components/responses/Gone" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/public/moodboards/{shareToken}/assets/{assetId}": {
+      "get": {
+        "operationId": "getPublicMoodboardAsset",
+        "tags": ["Public"],
+        "summary": "Получить asset, разрешённый публичным snapshot",
+        "security": [],
+        "parameters": [
+          { "$ref": "#/components/parameters/ShareToken" },
+          { "$ref": "#/components/parameters/AssetId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Публичное изображение",
+            "headers": {
+              "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+              "Cache-Control": { "schema": { "type": "string", "example": "private, max-age=300" } }
+            },
+            "content": {
+              "image/jpeg": { "schema": { "type": "string", "format": "binary" } },
+              "image/png": { "schema": { "type": "string", "format": "binary" } },
+              "image/webp": { "schema": { "type": "string", "format": "binary" } }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "410": { "$ref": "#/components/responses/Gone" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "roomplan_session",
+        "description": "Логическое имя существующей HttpOnly-сессии RoomPlan; физическое имя cookie является внутренней настройкой backend."
+      }
+    },
+    "headers": {
+      "RequestId": {
+        "description": "Корреляционный идентификатор запроса",
+        "schema": { "type": "string", "minLength": 8, "maxLength": 128 }
+      },
+      "RevisionEtag": {
+        "description": "Диагностический ETag текущей content revision, например rev-42. Concurrency определяется полем revision в request body.",
+        "schema": { "type": "string", "pattern": "^\\\"rev-[0-9]+\\\"$" }
+      }
+    },
+    "parameters": {
+      "MoodboardId": {
+        "name": "moodboardId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "AssetId": {
+        "name": "assetId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "ShareId": {
+        "name": "shareId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "ShareToken": {
+        "name": "shareToken",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43,128}$" }
+      },
+      "CsrfToken": {
+        "name": "X-CSRF-Token",
+        "in": "header",
+        "required": true,
+        "schema": { "type": "string", "minLength": 16, "maxLength": 512 }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "schema": { "type": "string", "minLength": 1, "maxLength": 512 }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 }
+      }
+    },
+    "responses": {
+      "BadRequest": { "$ref": "#/components/responses/Error400" },
+      "Unauthorized": { "$ref": "#/components/responses/Error401" },
+      "Forbidden": { "$ref": "#/components/responses/Error403" },
+      "NotFound": { "$ref": "#/components/responses/Error404" },
+      "Conflict": { "$ref": "#/components/responses/Error409" },
+      "Gone": { "$ref": "#/components/responses/Error410" },
+      "PayloadTooLarge": { "$ref": "#/components/responses/Error413" },
+      "UnsupportedMediaType": { "$ref": "#/components/responses/Error415" },
+      "Unprocessable": { "$ref": "#/components/responses/Error422" },
+      "RateLimited": { "$ref": "#/components/responses/Error429" },
+      "InternalError": { "$ref": "#/components/responses/Error500" },
+      "Error400": {
+        "description": "Некорректный запрос",
+        "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "Error401": {
+        "description": "Требуется действующая сессия RoomPlan",
+        "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "Error403": {
+        "description": "Операция запрещена политикой доступа, тарифом или CSRF",
+        "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "Error404": {
+        "description": "Ресурс отсутствует или не принадлежит пользователю",
+        "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "Error409": {
+        "description": "Конфликт revision, archive state, idempotency или использования asset",
+        "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "Error410": {
+        "description": "Публичная ссылка отозвана или истекла",
+        "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "Error413": {
+        "description": "Превышен лимит JSON, asset или preview",
+        "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "Error415": {
+        "description": "Неподдерживаемый Content-Type",
+        "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "Error422": {
+        "description": "JSON-документ или изображение не прошло валидацию",
+        "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "Error429": {
+        "description": "Превышен rate limit",
+        "headers": {
+          "X-Request-Id": { "$ref": "#/components/headers/RequestId" },
+          "Retry-After": { "schema": { "type": "integer", "minimum": 1 } }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "Error500": {
+        "description": "Внутренняя ошибка без раскрытия деталей",
+        "headers": { "X-Request-Id": { "$ref": "#/components/headers/RequestId" } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      }
+    },
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message", "details", "requestId"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "INVALID_ARGUMENT", "INVALID_JSON", "AUTH_REQUIRED", "FEATURE_NOT_AVAILABLE",
+                  "MOODBOARD_LIMIT_REACHED", "CSRF_FAILED", "RESOURCE_NOT_FOUND", "REVISION_CONFLICT",
+                  "IDEMPOTENCY_KEY_REUSED", "ASSET_IN_USE", "MOODBOARD_ARCHIVED", "SHARE_GONE",
+                  "PAYLOAD_TOO_LARGE", "UNSUPPORTED_MEDIA_TYPE", "INVALID_DOCUMENT", "INVALID_IMAGE",
+                  "RATE_LIMITED", "INTERNAL_ERROR", "SERVICE_UNAVAILABLE"
+                ]
+              },
+              "message": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "details": { "type": "object", "additionalProperties": true },
+              "requestId": { "type": "string", "minLength": 8, "maxLength": 128 }
+            }
+          }
+        }
+      },
+      "AccessEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "data"],
+        "properties": {
+          "status": { "type": "string", "const": "success" },
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["is_authorized", "user_id", "tariff_plan", "features"],
+            "properties": {
+              "is_authorized": { "type": "boolean" },
+              "user_id": { "type": ["integer", "null"], "minimum": 1 },
+              "tariff_plan": { "type": "string", "enum": ["guest", "free", "basic", "premium", "pro"] },
+              "features": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["moodboards_allowed", "max_moodboards"],
+                "properties": {
+                  "moodboards_allowed": { "type": "boolean" },
+                  "max_moodboards": { "type": "integer", "minimum": 0 }
+                }
+              }
+            }
+          }
+        }
+      },
+      "MoodboardSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion", "showGrid", "showCanvasSheet", "showElementDimensions", "alwaysSnap",
+          "showBindingGuides", "darkMode", "focusMode", "imageEraserSize"
+        ],
+        "properties": {
+          "schemaVersion": { "type": "integer", "const": 1 },
+          "showGrid": { "type": "boolean", "default": true },
+          "showCanvasSheet": { "type": "boolean", "default": true },
+          "showElementDimensions": { "type": "boolean", "default": false },
+          "alwaysSnap": { "type": "boolean", "default": true },
+          "showBindingGuides": { "type": "boolean", "default": false },
+          "darkMode": { "type": "boolean", "default": false },
+          "focusMode": { "type": "boolean", "default": false },
+          "imageEraserSize": { "type": "integer", "minimum": 8, "maximum": 256, "default": 64 }
+        }
+      },
+      "MoodboardList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["items", "nextCursor"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/MoodboardSummary" } },
+          "nextCursor": { "type": ["string", "null"] }
+        }
+      },
+      "MoodboardSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "revision", "previewUrl", "archivedAt", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "revision": { "type": "integer", "minimum": 0 },
+          "previewUrl": { "type": ["string", "null"], "format": "uri-reference" },
+          "archivedAt": { "type": ["string", "null"], "format": "date-time" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "MoodboardRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "document", "revision", "previewUrl", "archivedAt", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "document": { "$ref": "#/components/schemas/MoodboardDocument" },
+          "revision": { "type": "integer", "minimum": 0 },
+          "previewUrl": { "type": ["string", "null"], "format": "uri-reference" },
+          "archivedAt": { "type": ["string", "null"], "format": "date-time" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "MoodboardSaveResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "revision", "updatedAt"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "revision": { "type": "integer", "minimum": 1 },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateMoodboardRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "document": { "$ref": "#/components/schemas/MoodboardDocument" }
+        }
+      },
+      "UpdateMoodboardRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title"],
+        "properties": { "title": { "type": "string", "minLength": 1, "maxLength": 160 } }
+      },
+      "ArchiveMoodboardRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["archived"],
+        "properties": { "archived": { "type": "boolean" } }
+      },
+      "SaveContentRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["document", "revision"],
+        "properties": {
+          "document": { "$ref": "#/components/schemas/MoodboardDocument" },
+          "revision": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "MoodboardDocument": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schemaVersion", "pages"],
+        "properties": {
+          "schemaVersion": { "type": "integer", "const": 2 },
+          "pages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 40,
+            "items": { "$ref": "#/components/schemas/MoodboardPage" }
+          }
+        }
+      },
+      "MoodboardPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "canvas", "elements"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "canvas": { "$ref": "#/components/schemas/CanvasSettings" },
+          "elements": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/components/schemas/MoodboardElement" } }
+        }
+      },
+      "CanvasSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["width", "height", "background"],
+        "properties": {
+          "width": { "type": "number", "exclusiveMinimum": 0 },
+          "height": { "type": "number", "exclusiveMinimum": 0 },
+          "background": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      },
+      "MoodboardElement": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "x", "y", "width", "height"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "type": { "type": "string", "enum": ["image", "text", "shape", "brush", "highlighter", "sticker", "arrow", "frame"] },
+          "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "x": { "type": "number" },
+          "y": { "type": "number" },
+          "width": { "type": "number", "exclusiveMinimum": 0 },
+          "height": { "type": "number", "exclusiveMinimum": 0 },
+          "rotation": { "type": "number" },
+          "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+          "locked": { "type": "boolean" },
+          "hyperlink": { "type": ["string", "null"], "format": "uri", "maxLength": 2048 },
+          "frameId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "groupId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "groupName": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "groupPath": { "type": "array", "maxItems": 12, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 128 } },
+          "groupNames": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 80 } },
+          "assetId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "aspectRatio": { "type": "number", "exclusiveMinimum": 0 },
+          "flipX": { "type": "boolean" },
+          "flipY": { "type": "boolean" },
+          "backgroundRemoved": { "type": "boolean" },
+          "eraseMask": { "$ref": "#/components/schemas/ImageEraseMask" },
+          "text": { "type": "string", "maxLength": 20000 },
+          "fill": { "type": "string", "maxLength": 128 },
+          "textColor": { "type": "string", "maxLength": 128 },
+          "fontFamily": { "type": "string", "maxLength": 128 },
+          "fontSize": { "type": "number", "exclusiveMinimum": 0 },
+          "fontStyle": { "type": "string", "enum": ["normal", "bold"] },
+          "align": { "type": "string", "enum": ["left", "center", "right"] },
+          "shapeType": {
+            "type": "string",
+            "enum": ["rectangle", "circle", "diamond", "triangle", "star", "oval", "hexagon", "cloud", "arrow-left", "arrow-up", "arrow-down", "arrow-right", "checkbox-x", "checkbox-v"]
+          },
+          "stroke": { "type": "string", "maxLength": 128 },
+          "strokeWidth": { "type": "number", "minimum": 0 },
+          "cornerRadius": { "type": "number", "minimum": 0, "maximum": 1000 },
+          "points": { "type": "array", "minItems": 2, "items": { "type": "number" } },
+          "startCap": { "type": "string", "enum": ["none", "arrow1", "arrow2"] },
+          "endCap": { "type": "string", "enum": ["none", "arrow1", "arrow2"] },
+          "bindings": { "$ref": "#/components/schemas/ArrowBindings" }
+        }
+      },
+      "ImageEraseMask": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "strokes"],
+        "properties": {
+          "version": { "type": "integer", "const": 1 },
+          "strokes": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["size", "points"],
+              "properties": {
+                "size": { "type": "number", "minimum": 0.0001, "maximum": 4 },
+                "points": { "type": "array", "minItems": 2, "maxItems": 4000, "items": { "type": "number", "minimum": 0, "maximum": 1 } }
+              }
+            }
+          }
+        }
+      },
+      "ArrowBindings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "start": { "$ref": "#/components/schemas/ArrowBinding" },
+          "end": { "$ref": "#/components/schemas/ArrowBinding" }
+        }
+      },
+      "ArrowBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["targetElementId", "anchor"],
+        "properties": {
+          "targetElementId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "anchor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["x", "y"],
+            "properties": {
+              "x": { "type": "number", "minimum": 0, "maximum": 1 },
+              "y": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
+        }
+      },
+      "AssetMetadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "moodboardId", "downloadUrl", "width", "height", "mimeType", "size", "createdAt"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "moodboardId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "downloadUrl": { "type": "string", "format": "uri-reference" },
+          "width": { "type": "integer", "minimum": 1, "maximum": 16384 },
+          "height": { "type": "integer", "minimum": 1, "maximum": 16384 },
+          "mimeType": { "type": "string", "enum": ["image/jpeg", "image/png", "image/webp"] },
+          "size": { "type": "integer", "minimum": 1, "maximum": 31457280 },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateShareRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expiresInDays": { "type": "integer", "minimum": 1, "maximum": 365, "default": 30 }
+        }
+      },
+      "ShareRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["shareId", "url", "createdAt", "expiresAt"],
+        "properties": {
+          "shareId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "url": { "type": "string", "format": "uri-reference" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PublicMoodboardSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "document", "revision", "assets", "createdAt", "expiresAt"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "document": { "$ref": "#/components/schemas/MoodboardDocument" },
+          "revision": { "type": "integer", "minimum": 0 },
+          "assets": { "type": "array", "items": { "$ref": "#/components/schemas/PublicAsset" } },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PublicAsset": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "url", "width", "height", "mimeType"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "url": { "type": "string", "format": "uri-reference" },
+          "width": { "type": "integer", "minimum": 1 },
+          "height": { "type": "integer", "minimum": 1 },
+          "mimeType": { "type": "string", "enum": ["image/jpeg", "image/png", "image/webp"] }
+        }
+      }
+    }
+  }
+}

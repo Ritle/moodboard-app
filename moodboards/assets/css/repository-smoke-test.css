@@ -1,0 +1,115 @@
+.smoke-test-page {
+    min-height: 100vh;
+    padding: 48px 24px;
+    background: var(--bg-grey);
+}
+
+.smoke-test {
+    width: min(920px, 100%);
+    margin: 0 auto;
+    padding: 32px;
+    background: var(--model-fill);
+    border: 1px solid var(--stroke-1);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.smoke-test__header {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.smoke-test h1 {
+    margin: 0 0 10px;
+    font-family: var(--second-family);
+    font-size: 34px;
+    letter-spacing: -0.04em;
+}
+
+.smoke-test__lead {
+    max-width: 660px;
+    margin: 0;
+    color: var(--color-muted);
+    line-height: 1.6;
+}
+
+.smoke-test__summary {
+    margin: 28px 0 16px;
+    padding: 16px 18px;
+    color: var(--body);
+    background: var(--bg-grey);
+    border: 1px solid var(--stroke-1);
+    border-radius: var(--radius-sm);
+    font-weight: 700;
+}
+
+.smoke-test__summary--success {
+    color: #08772a;
+    background: var(--correct-fill);
+}
+
+.smoke-test__summary--failure {
+    color: #b42b2b;
+    background: var(--error-fill);
+}
+
+.smoke-test__results {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.smoke-test__result {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 12px 14px;
+    border: 1px solid var(--stroke-1);
+    border-radius: var(--radius-sm);
+}
+
+.smoke-test__result--success .smoke-test__icon {
+    color: var(--correct);
+}
+
+.smoke-test__result--failure {
+    border-color: #f0baba;
+    background: var(--error-fill);
+}
+
+.smoke-test__result--failure .smoke-test__icon,
+.smoke-test__result--failure .smoke-test__detail {
+    color: #b42b2b;
+}
+
+.smoke-test__detail {
+    color: var(--color-muted);
+    font-size: 13px;
+}
+
+@media (max-width: 720px) {
+    .smoke-test-page {
+        padding: 20px 12px;
+    }
+
+    .smoke-test {
+        padding: 22px;
+    }
+
+    .smoke-test__header {
+        display: grid;
+    }
+
+    .smoke-test__result {
+        grid-template-columns: 24px 1fr;
+    }
+
+    .smoke-test__detail {
+        grid-column: 2;
+    }
+}

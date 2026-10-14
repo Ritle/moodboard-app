@@ -1,0 +1,14 @@
+{
+  "name": "roomplan-moodboards-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:e2e": "playwright test --project=chromium",
+    "test:e2e:headed": "playwright test --project=chromium --headed",
+    "test:e2e:browsers": "playwright test --project=chrome --project=edge --project=firefox",
+    "test:e2e:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}
